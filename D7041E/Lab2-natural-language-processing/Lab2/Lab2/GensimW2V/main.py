@@ -5,57 +5,51 @@ import nltk
 
 #@author: The first version of this code is the courtesy of Vadim Selyanik
 
-nltk.download('wordnet') # download the WordNet database
-logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
-lemmatizer = nltk.WordNetLemmatizer() # create a lemmatizer
 
+nltk.download('wordnet')  # download the WordNet database
+logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
+lemmatizer = nltk.WordNetLemmatizer()  # create a lemmatizer
+
+# Load sentences from the lemmatized text file
 sentences = []
 file = open("lemmatized.text", "r")
-
-for line in file: # read the file and create list which contains all sentences found in the text
+for line in file:  # read the file and create list which contains all sentences found in the text
     sentences.append(line.split())
-# train word2vec on the two sentences
+file.close()
 
-dimension = 1000 # parameter for Word2vec size of vectors for word embedding
-#Dimension = 10, ferq = 0.00055, Percentage of correct answers: 45.0%
-#Dimension = 100, ferq = 0.00055, Percentage of correct answers: 67.5%
-#Dimension = 1000, ferq = 0.00055, Percentage of correct answers: 68.75%
+# Parameters for Word2Vec training
+dimensions = [10, 100, 1000]  # Different dimensionalities to test
+threshold = 0.00055  # Threshold for the sampling of the words
+num_of_simulations = 5  # Number of simulations to run
+results = {}
 
-threshold = 0.00055 # parameter for Word2vec
+# Running simulations for each dimensionality
+for dimension in dimensions:
+    accuracies = []
+    for sim in range(num_of_simulations):
+        # Train Word2Vec model with the given dimensionality
+        model = gensim.models.Word2Vec(sentences, min_count=1, sample=threshold, sg=1, vector_size=dimension)  # create model using Word2Vec with the given parameters
 
-
-sum = 0.0
-
-# 
-model = gensim.models.Word2Vec(sentences, min_count=1, sample=threshold, sg=1,vector_size=dimension) # create model using Word2Ve with the given parameters
-#
-print(len(model.wv)) # check the length of the vocabulary which was formed by Word2Vec
-
-#The rest implements passing TOEFL tests
-i = 0 #counter for TOEFL tests
-number_of_tests = 80
-text_file = open('new_toefl.txt', 'r')
-right_answers = 0 # variable for correct answers
-number_skipped_tests = 0 # some tests could be skipped if there are no corresponding words in the vocabulary extracted from the training corpus
-while i < number_of_tests:
-            line = text_file.readline() #read line in the file
-            words = line.split() # extract words from the line
+        # The rest implements passing TOEFL tests
+        number_of_tests = 80
+        text_file = open('new_toefl.txt', 'r')
+        right_answers = 0  # variable for correct answers
+        number_skipped_tests = 0  # some tests could be skipped if there are no corresponding words in the vocabulary
+        for i in range(number_of_tests):
+            line = text_file.readline()  # read line in the file
+            words = line.split()  # extract words from the line
             try:
-                words = [lemmatizer.lemmatize(lemmatizer.lemmatize(lemmatizer.lemmatize(word, 'v'), 'n'), 'a') for word in
-                         words] # lemmatize words in the current test
+                words = [lemmatizer.lemmatize(lemmatizer.lemmatize(lemmatizer.lemmatize(word, 'v'), 'n'), 'a') for word in words]  # lemmatize words in the current test
                 vectors = []
-                if words[0] in model.wv: # check if there embedding for the query word
-                    k = 1 #counter for loop iterating over 5 words in the test
+                if words[0] in model.wv:  # check if there is embedding for the query word
                     vectors.append(model.wv[words[0]])
-                    while k < 5:
-                        if words[k] in model.wv: # if alternative has the embedding
-                            vectors.append(model.wv[words[k]]) #assing the learned vector
-                        else: 
-                            vectors.append(np.random.randn(dimension)) #assing random vector
-                        k += 1
-                    right_answers += hf.get_answer_mod(vectors) #find the closest vector and check if it is the correct answer
-
-            except KeyError: # if there is no representation for the query vector than skip
+                    for k in range(1, 5):
+                        if words[k] in model.wv:  # if alternative has the embedding
+                            vectors.append(model.wv[words[k]])  # assign the learned vector
+                        else:
+                            vectors.append(np.random.randn(dimension))  # assign random vector
+                    right_answers += hf.get_answer_mod(vectors)  # find the closest vector and check if it is the correct answer
+            except KeyError:  # if there is no representation for the query vector then skip
                 number_skipped_tests += 1
                 print("skipped test: " + str(i) + "; Line: " + str(words))
             except IndexError:
@@ -63,7 +57,15 @@ while i < number_of_tests:
                 print(line)
                 print(words)
                 break
-            i += 1
-text_file.close()
-sum += 100 * float(right_answers) / float(number_of_tests) #get the percentage
-print("Threshold ferq = "+ str(threshold)+" Percentage of correct answers: " + str(sum) + "%")
+        text_file.close()
+        accuracy = 100 * float(right_answers) / float(number_of_tests)  # get the percentage
+        accuracies.append(accuracy)
+        results[dimension] = accuracy
+        logging.info(f"Dimension: {dimension}, Accuracy: {accuracy:.2f}%")
+
+# Reporting the accuracy for all simulations
+for dimension, scores in results.items():
+    print("Dimension", accuracies)
+    avg_accuracy = np.mean(scores)
+    print(f"Dimensionality: {dimension}, Average Accuracy: {avg_accuracy:.2f}%")
+    print(f"Individual Scores: {scores}\n")
