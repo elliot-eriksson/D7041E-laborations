@@ -1,4 +1,5 @@
 # import modules & set up logging
+import time
 import gensim, logging, numpy as np
 import help_functions as hf
 import nltk
@@ -18,15 +19,18 @@ for line in file:  # read the file and create list which contains all sentences 
 file.close()
 
 # Parameters for Word2Vec training
-dimensions = [10, 100, 1000]  # Different dimensionalities to test
+dimensions = [10, 250, 1000]  # Different dimensionalities to test
 threshold = 0.00055  # Threshold for the sampling of the words
 num_of_simulations = 5  # Number of simulations to run
 results = {}
-
+times = []
+accuracies = []
 # Running simulations for each dimensionality
 for dimension in dimensions:
-    accuracies = []
+    accuracies_per_dimension = []
+    times_per_dimension = []
     for sim in range(num_of_simulations):
+        start_time = time.time()
         # Train Word2Vec model with the given dimensionality
         model = gensim.models.Word2Vec(sentences, min_count=1, sample=threshold, sg=1, vector_size=dimension)  # create model using Word2Vec with the given parameters
 
@@ -59,13 +63,18 @@ for dimension in dimensions:
                 break
         text_file.close()
         accuracy = 100 * float(right_answers) / float(number_of_tests)  # get the percentage
-        accuracies.append(accuracy)
+        accuracies_per_dimension.append(accuracy)
         results[dimension] = accuracy
         logging.info(f"Dimension: {dimension}, Accuracy: {accuracy:.2f}%")
+        times_per_dimension.append(time.time() - start_time)
+    avg_time = np.mean(times_per_dimension)
+    avg_accuracy = np.mean(accuracies_per_dimension)
+    accuracies.append(avg_accuracy)
+    times.append(avg_time)
+    
 
 # Reporting the accuracy for all simulations
-for dimension, scores in results.items():
-    print("Dimension", accuracies)
-    avg_accuracy = np.mean(scores)
-    print(f"Dimensionality: {dimension}, Average Accuracy: {avg_accuracy:.2f}%")
-    print(f"Individual Scores: {scores}\n")
+for dimension in dimensions:
+
+    print(f"Dimension: {dimension}, Average Accuracy: {accuracies[dimensions.index(dimension)]:.2f}%, Average time: {times[dimensions.index(dimension)]:.2f}s")
+
