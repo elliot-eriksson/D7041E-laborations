@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.preprocessing import OneHotEncoder
 from mackey_glass_gen import mackey_glass
+from sklearn.metrics import accuracy_score
+
 
 class ESN:
     def root_mean_square_error(self, y, y_hat):
@@ -36,9 +38,9 @@ class ESN:
         # return np.tanh(np.dot(self.W_in, input_data) + np.dot(self.W, u))
 
         u_bias = np.append(u, 1)
-        print(f"u shape: {u.shape}")
-        print(f"u_bias shape: {u_bias.shape}")
-        print(f"self.W_in shape: {self.W_in.shape}")
+        # print(f"u shape: {u.shape}")
+        # print(f"u_bias shape: {u_bias.shape}")
+        # print(f"self.W_in shape: {self.W_in.shape}")
 
         new_state = np.tanh(np.dot(self.W_in, u_bias) + np.dot(self.W, x))
         return new_state
@@ -64,7 +66,7 @@ class ESN:
                 u = Y_target[t - 1]  # y(n-1)
             #Equation 3 section 2
             #Evalutes the current state and previous reservoir state
-            print(f"u shape training: {u.shape}")
+            # print(f"u shape training: {u.shape}")
             x = self.reservoir_update(u, x)
             reservoir_states[t] = x
             
@@ -79,7 +81,7 @@ class ESN:
         beta = reg_param 
         I = np.eye(X.shape[1])
         # self.W_out = np.linalg.solve(np.dot(X, X.T) + beta * I, np.dot(X, Y_target))
-        print("passed ")
+        # print("passed ")
 
         # equation 9 in the paper gave us the following
         self.W_out = np.linalg.solve(X.T @ X + beta * I, X.T @ Y_target)
@@ -113,23 +115,42 @@ class ESN:
         return np.array(predictions)
         # return augmented_states @ self.W_out 
 
-    def trainLeaf(self, x_data, y_train_onehot):
-        """
-        Train the Echo State Network (ESN).
-        """
+    def predictLeaf(self, X_test):
+        predictions = []
+        
 
-        X_train_with_bias = np.hstack((np.ones((x_data.shape[0], 1)), x_data))
-        states = np.zeros((x_data.shape[0], self.nr_reservoir))
-        self.states = np.zeros((self.nr_reservoir,))
-        for i in range(X_train_with_bias.shape[0]):
-            u = X_train_with_bias[i]
-            self.states = np.tanh(np.dot(self.Win, u) + np.dot(self.W, self.states))
-            states[i] = self.states
+        for signal in X_test:
+            # Initialize reservoir state to zero for each signal
+            # reservoir_state = np.zeros((X_test.shape[0], self.reservoir_size_Nx))
+            reservoir_state = np.zeros(self.reservoir_size_Nx)
 
-        ridge = Ridge(alpha=self.reg_coefficient, fit_intercept=False)
-        ridge.fit(states, y_train_onehot)
-        self.ridge = ridge
-        self.Wout = ridge.coef_
+            # Feed the entire signal to the reservoir
+            for t in range(signal.shape[0]):
+                input_t = signal[t:t + self.input_dim]  # Extract input vector
+                if input_t.shape[0] != self.input_dim:
+                        # Handle edge case: zero-pad if needed
+                    input_t = np.pad(input_t, (0, self.input_dim - input_t.shape[0]), mode='constant')
+                reservoir_state = self.reservoir_update(input_t, reservoir_state)
+            # Create augmented state [1 | last_input | final reservoir state]
+            augmented_state = np.hstack([1, reservoir_state])
+
+            # augmented_states = np.hstack((np.ones((reservoir_states.shape[0], 1)), reservoir_states))
+
+
+            # Compute output from the readout matrix
+            # print(f'{self.W_out.shape[0]=}')
+            # print(f'{augmented_state.shape[0]=}')
+            output = augmented_state @ self.W_out
+
+            # Select the class with the highest output value
+            predicted_class = np.argmax(output)
+            predictions.append(predicted_class)
+
+        return np.array(predictions)
+
+
+    def trainLeaf(self, input_data, y_train_onehot, reg_param):
+
 
         #######################################################################
 
@@ -143,35 +164,30 @@ class ESN:
         x = np.zeros((self.reservoir_size_Nx))
 
         for t in range(time_steps):
-            # u = input_data[t]
+            u = input_data[t]
             # Sune testar
-            if t == 0:
-                # For the first time step, no previous output is available
-                u = input_data[t]
-            else:
-                # Use teaching forcing signal
-                u = Y_target[t - 1]  # y(n-1)
             #Equation 3 section 2
             #Evalutes the current state and previous reservoir state
-            print(f"u shape training: {u.shape}")
+            # print(f"u shape training: {u.shape}")
             x = self.reservoir_update(u, x)
             reservoir_states[t] = x
             
         self.last_training_state = x
-        augmented_reservoir_state = np.hstack([np.ones((time_steps, 1)), input_data.reshape(-1, 1), reservoir_states])
+
+        # augmented_reservoir_state = np.hstack([np.ones((time_steps, 1)), input_data.reshape(-1, 1), reservoir_states])
+
+        augmented_states = np.hstack((np.ones((reservoir_states.shape[0], 1)), reservoir_states))
 
         # augmented_reservoir_state = np.hstack([np.ones((time_steps, 1)),input_data, reservoir_states])
 
-        X = augmented_reservoir_state[discard_steps:, :]    
-        Y_target = Y_target[discard_steps:]
         
         beta = reg_param 
-        I = np.eye(X.shape[1])
+        I = np.eye(augmented_states.shape[1])
         # self.W_out = np.linalg.solve(np.dot(X, X.T) + beta * I, np.dot(X, Y_target))
         print("passed ")
 
         # equation 9 in the paper gave us the following
-        self.W_out = np.linalg.solve(X.T @ X + beta * I, X.T @ Y_target)
+        self.W_out = np.linalg.solve(augmented_states.T @ augmented_states + beta * I, augmented_states.T @ y_train_onehot)
     
 
 def sinusoidal_signal(n):
@@ -305,7 +321,8 @@ def swedishLeaf_ESN_testing():
 
     encoder = OneHotEncoder(sparse_output=False, categories='auto')
     y_train = encoder.fit_transform(y_train.reshape(-1, 1))
-    y_test = encoder.transform(y_test.reshape(-1, 1))
+    
+    # y_test = encoder.transform(y_test.reshape(-1, 1))
     
     print(f'{X_train.shape=}')
     print(f'{y_train.shape=}')
@@ -320,7 +337,7 @@ def swedishLeaf_ESN_testing():
     spectral_radius = 0.99
     input_scaling = 0.25
     reg_param = 1e-8
-    nr_of_simulations = 10
+    nr_of_simulations = 1
     # Todo: ta bort lite grejer här
     
 
@@ -330,28 +347,27 @@ def swedishLeaf_ESN_testing():
     predictions = []
 
     for run in range(nr_of_simulations):
-        esn = ESN(input_dim=128, 
+        esn = ESN(input_dim=X_train.shape[1], 
                 reservoir_size_Nx=reservoir_size, 
-                output_dim=128, 
+                output_dim=y_train.shape[1], 
                 spectral_radius=spectral_radius, 
                 input_scaling=input_scaling,
                 seed=run)
 
-        esn.train_ESN(X_train, y_train , discard_steps=1000, reg_param=reg_param)
+        esn.trainLeaf(X_train, y_train , reg_param=reg_param)
 
-        prediction = esn.predict(X_test, y_test)
+        prediction = esn.predictLeaf(X_test)
         predictions.append(prediction)
 
-        
+    print(f'{predictions=}')
     mean_predictions = np.mean(predictions, axis=0)
-    # print("Root mean square error: ", esn.root_mean_square_error(test_target, mean_predictions))
-    print(f'{predictions.shape=}')
-    print("Mean predictions: ", mean_predictions)
-    
-    plt.plot(test_target, label="True Signal")
-    plt.plot(mean_predictions, label="ESN Predictions")
-    plt.legend()
-    plt.show()
+    print(f'{mean_predictions=}')
+    # predicted_labels = np.argmax(mean_predictions)
+    predicted_labels = np.round(mean_predictions).astype(int)  # Use if outputs are continuous and discrete classes are expected
+    print(f'{predicted_labels=}')
+    print(f'{y_test=}')
+    print(f'{accuracy_score(y_test, predicted_labels)=}')
+
    
 
 
