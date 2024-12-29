@@ -292,7 +292,7 @@ def swedishLeaf_ESN_testing():
 
 
 if __name__ == "__main__":
-    # Sinusoid_ESN_testing()
-    # Mackey_Glass_ESN_testing()
+    Sinusoid_ESN_testing()
+    Mackey_Glass_ESN_testing()
     swedishLeaf_ESN_testing()
     # Plot results
